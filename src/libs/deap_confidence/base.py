@@ -26,9 +26,9 @@ class ConfidenceFitness():
 
         if len(self._samples) >= 3:
             psize = self.getSize()
-            self._middle = np.mean(samples)
             self._interval = newint
-            self._gradientHistory.append((psize - self.getSize()) / psize)
+            self._middle = np.mean(self._interval)
+            self._gradientHistory.append(abs(psize - self.getSize()))
             # print("int", self._interval)
 
         if len(self._samples) >= 2:
@@ -89,7 +89,7 @@ def removeDominated(individuals, atleast, atmost):
     domDistances, individuals = zip(*sorted(zip(domDistances, individuals), reverse=True))
     individuals = list(individuals)
     domCount = sum([1 for d in domDistances if d <= 0])
-    print("domcount", domCount, atleast, atmost)
+    # print("domcount", domCount, atleast, atmost)
 
     totake = len(individuals)-domCount
     if totake < atleast:

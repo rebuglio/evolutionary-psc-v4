@@ -1,4 +1,5 @@
 import random
+import sys
 import time
 from dataclasses import dataclass
 from typing import Type
@@ -6,7 +7,7 @@ from typing import Type
 import numpy as np
 from deap import base, creator, tools
 
-from deap_confidence import ConfidenceFitness, removeDominated
+from libs.deap_confidence import ConfidenceFitness, removeDominated
 from loss import socVal
 from problems.base import EvPSCSym
 from the_operator import opOpt
@@ -46,7 +47,7 @@ def paOpt(sym: Type[EvPSCSym]):
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
 
     toolbox.register("mate", cxTwoPointCopy4ndArray)
-    toolbox.register("mutate", tools.mutPolynomialBounded, eta=10, low=lower, up=upper, indpb=0.05)
+    toolbox.register("mutate", tools.mutPolynomialBounded, eta=10, low=lower, up=upper, indpb=0.2)
     toolbox.register("evaluate", lambda: (_ for _ in ()).throw(("Cant use evaluate in this simulation")))
 
     # def middleEval(ind, sym: Type[EvPSCSym]):
@@ -54,7 +55,7 @@ def paOpt(sym: Type[EvPSCSym]):
     #
     # toolbox.register("middleEvaluate", sym=sym)
 
-    def paSample(gen: np.ndarray, sym: Type[EvPSCSym]):
+    def paSamples(gen: np.ndarray, sym: Type[EvPSCSym]):
         [rw] = makeWorlds(sym, 1)
         paFen = PaFenotype(sym, gen)
         E = opOpt(sym, paFen, rw)
@@ -62,84 +63,119 @@ def paOpt(sym: Type[EvPSCSym]):
 
     def _paOpt(sym):
 
-        toolbox.register("sample", paSample, sym=sym)
+        toolbox.register("sample", paSamples, sym=sym)
         toolbox.register("select", removeDominated)
         hof = tools.HallOfFame(1, similar=np.array_equal)
 
-        NPOP = 2
-        MAXIT = 10
+        NPOP = 10
+        MAXIT = 30
         pop = toolbox.population(n=NPOP)
 
         CXPB, MUTPB = 0.5, 0.2
-        NGEN = 5
+        NGEN = 200000
 
         for git in range(NGEN):
             # at least 2 samples for individual
             for ind in pop:
-                while len(ind.fitness._samples) < 3:
+                while len(ind.fitness._samples) < 10:
                     ind.fitness.addSamples([toolbox.sample(ind)])
                 # print(f"startup_{g}", ind.fitness.middle, ind.fitness.size)
 
             maxit = MAXIT
             while True:
-                print("p0", pop[0].fitness.getSize(), len(pop[0].fitness._samples))
-                print("p1", pop[1].fitness.getSize(), len(pop[1].fitness._samples))
-
                 # Try to select
-                print(len(pop))
-                pop = toolbox.select(pop, NPOP//2,
-                         NPOP if maxit > 0 else NPOP - 1) # if maxit reached, remove worst
-                print(len(pop))
+                pop = toolbox.select(pop, int(NPOP/10*3),
+                         NPOP if maxit > 0 else int(NPOP/10*8)) # if maxit reached, remove worst
                 if len(pop) < NPOP:
+                    if (maxit==0):
+                        print("By max...")
+                    else:
+                        print("By DOM!")
                     break # If at least one individual gone, stop.
                 # Else, improve interval with best gradient
-                pop = sorted(pop, key=lambda ind: ind.fitness.getGradient(3), reverse=True)
+                pop = sorted(pop, key=lambda ind: ind.fitness.getGradient(5), reverse=True)
                 pop[0].fitness.addSamples([toolbox.sample(pop[0])])
                 maxit -= 1
 
-            # select best individuals
-            bestinds = pop[:NPOP - len(pop)]
+                print("## pop lens:", [
+                    len(p.fitness._samples) if p.fitness._samples is not None else None for p in pop
+                ])
 
+            # pop = sorted(pop, key=lambda ind: ind.fitness.getGradient(3), reverse=True)
+
+            pop = sorted(pop, key=lambda p: p.fitness.middle, reverse=True)
+            print("## pop before:", [
+                int(p.fitness.middle/1000) if p.fitness.middle is not None else None for p in pop
+            ])
+
+            # select best individuals
+            # pop = sorted(pop, key=lambda p: p.fitness.middle, reverse=True)
+            random.shuffle(pop)
+            mutants = pop[:NPOP - len(pop)]
+            print("## create frm:", [
+                int(p.fitness.middle / 1000) if p.fitness.middle is not None else None for p in mutants
+            ])
             offspring = []
-            for mutant in bestinds:
+            for mutant in mutants:
                 clone = toolbox.clone(mutant)
                 toolbox.mutate(clone)
                 clone.fitness.reset()
                 offspring.append(clone)
 
+            for ind in offspring:
+                while len(ind.fitness._samples) < 3:
+                    ind.fitness.addSamples([toolbox.sample(ind)])
+
+            print("## obtain   :", [
+                int(p.fitness.middle / 1000) if p.fitness.middle is not None else None for p in offspring
+            ])
+
+            # The population is partially replaced by the offspring
             pop[:] = pop + offspring
 
-            # The population is entirely replaced by the offspring
             hof.update(pop)
-
             best = hof[0]
-            print("## middlesv:", hof[0].fitness.middle)
-            # print(best.fitness.getMiddle, best.fitness.getMin, best.fitness.getMax)
+            # pop = sorted(pop, key=lambda ind: ind.fitness.getGradient(3), reverse=True)
 
 
-            # print(toolbox.evaluate)
+
+            pop = sorted(pop, key=lambda p: p.fitness.middle, reverse=True)
+            print("## pop after :", [
+                int(p.fitness.middle/1000) if p.fitness.middle is not None else None for p in pop
+            ])
+            print("bestsv", )
+
+            with open('checkpoint.txt', 'a') as f:
+                printpa(best, sym, file=f)
 
         return hof[0]
 
     return _paOpt(sym)
 
 
+def printpa(best,sym, file=sys.stdout):
+    fen = PaFenotype(sym, best)
+    print("fee", fen.fee, file=file)
+    print("th", fen.th, file=file)
+    print("pnlt", np.int64(fen.pnlt / 1000), file=file)
+    print("Rpc", np.int64(fen.Rpc * 100), file=file)
+    print("socval middle", best.fitness.middle, file=file)
+    print("socval int", best.fitness._interval, file=file)
+
 # example
 if __name__ == '__main__':
+
+
     # only 4 test
     from problems.a99 import a99 as sym
+
+    random.seed(54)
 
     sym.doPrecalcs(sym)
 
     s = time.time()
     best = paOpt(sym)
-    fen = PaFenotype(sym, best)
-    print("fee", fen.fee)
-    print("th", fen.th)
-    print("pnlt", np.int64(fen.pnlt/1000))
-    print("Rpc", np.int64(fen.Rpc*100))
-    print("socval middle", best.fitness.middle)
-    print("socval int", best.fitness._interval)
+    printpa(best,sym)
     t = time.time() - s
     print("Time:", t)
 

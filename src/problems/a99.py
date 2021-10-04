@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 import numpy as np
 
-from src.problems.base import EvPSCSym
-from src.utilities import ungroup, group, lslice
+from .base import EvPSCSym
+from utilities import ungroup, group, lslice
 
 rng = np.random.default_rng(43)
 

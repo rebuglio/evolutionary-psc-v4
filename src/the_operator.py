@@ -1,3 +1,4 @@
+import multiprocessing
 import random
 import time
 from dataclasses import dataclass
@@ -30,6 +31,9 @@ def opOpt(sym: Type[EvPSCSym], pa: PaFenotype, rw: Type[RandomWorld]):
     toolbox.register("select", tools.selTournament, tournsize=3)
 
     toolbox.register("evaluate", opLoss, sym=sym, pa=pa, rw=rw)
+
+    #pool = multiprocessing.Pool()
+    #toolbox.register("map", pool.map)
 
     pop = toolbox.population(n=300)
     hof = tools.HallOfFame(1, similar=np.array_equal)
