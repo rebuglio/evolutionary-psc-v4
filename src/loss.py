@@ -38,7 +38,7 @@ def socVal(
     if OPG < 0:
         SV = SV + 2 * OPG
 
-    return SV, # dont remove comma
+    return SV
 
 
 def opLoss(

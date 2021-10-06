@@ -6,11 +6,12 @@ from typing import Type
 
 import numpy as np
 from deap import algorithms, base, creator, tools
+from scipy import stats as st
 
 from loss import opLoss
 from problems.base import EvPSCSym
 from datatype import PaFenotype
-from the_randomworld import RandomWorld
+from the_randomworld import RandomWorld, makeWorlds
 from utilities import opGen2fen
 from utils.deaputils import cxTwoPointCopy4ndArray
 
@@ -50,7 +51,13 @@ if __name__ == '__main__':
     # only 4 test
     from problems.a99 import a99 as sym
 
-    eps = np.zeros((sym.R, sym.T))
+    random.seed(1)
+
+    sym.doPrecalcs(sym)
+
+    rws = makeWorlds(sym, 10)
+
+    #eps = np.zeros((sym.R, sym.T))
     fee = 600000
     pnlt = np.ones((sym.K, sym.T)) * 100000
     th = np.ones((sym.K, sym.T)) * 0.1
@@ -62,17 +69,20 @@ if __name__ == '__main__':
         fee, pnlt, th, Rpc = fee, pnlt, th, Rpc
 
 
-    @dataclass
-    class rw(RandomWorld):
-        eps = eps
+    # @dataclass
+    # class rw(RandomWorld):
+    #     eps = eps
 
 
-    sym.doPrecalcs(sym)
+
 
     s = time.time()
-    Ebest = opOpt(sym, pa, rw)
-    # print(toolbox.evaluate(Ebest))
-    print(np.int64(sym.F / 1000))
-    print(Ebest)
-    t = time.time() - s
-    print("Time:", t)
+    Ebests = [opOpt(sym, pa, rw) for rw in rws]
+    print(Ebests)
+    print(st.normaltest(Ebests))
+
+    #
+    # print(np.int64(sym.F / 1000))
+    # print(Ebest)
+    # t = time.time() - s
+    # print("Time:", t)

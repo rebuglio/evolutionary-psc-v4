@@ -3,7 +3,6 @@ from typing import Type
 import numpy as np
 
 from problems.base import EvPSCSym
-from rndsingleton import rng
 
 lslice = lambda L, il: (sum(L[:il]),sum(L[:il+1]))
 group = lambda V, L, fn: [fn(V[sum(L[:il]):sum(L[:il+1])]) for il in range(len(L))]
@@ -42,7 +41,7 @@ def riskPrecalc(R, T, L, F_raw, R_raw, FA_i):
                     if frt != 0:
                         v = [x * frt / 100 for x in R_raw[r][t]['v']]
                         p = R_raw[r][t]['p']
-                        tosum.append(rng.choice(v, p=p, size=RPN))
+                        tosum.append(np.random.choice(v, p=p, size=RPN))
                 if (len(tosum) > 0):
                     Rv[r][t] = sum(tosum)
                     Rp[r][t] = None  # all p=1
