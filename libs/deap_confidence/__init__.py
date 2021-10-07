@@ -1,1 +1,1 @@
-from .src.base import StochasticFitness, StochasticHallOfFame, popReliability
+from .src.base import ConfidenceFitness, cmpQuality, rmvDup

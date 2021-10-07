@@ -1,5 +1,6 @@
 import multiprocessing
 import random
+import socket
 import time
 from dataclasses import dataclass
 from typing import Type
@@ -15,13 +16,11 @@ from the_randomworld import RandomWorld, makeWorlds
 from utilities import opGen2fen
 from utils.deaputils import cxTwoPointCopy4ndArray
 
-creator.create("OpFitnessMax", base.Fitness, weights=(1.0,))
-creator.create("OpIndividual", np.ndarray, fitness=creator.OpFitnessMax)
+toolbox = base.Toolbox()
 
-# namespace
-def opOpt(sym: Type[EvPSCSym], pa: PaFenotype, rw: Type[RandomWorld]):
-
-    toolbox = base.Toolbox()
+def opPrecalc(sym: Type[EvPSCSym]):
+    creator.create("OpFitnessMax", base.Fitness, weights=(1.0,))
+    creator.create("OpIndividual", np.ndarray, fitness=creator.OpFitnessMax)
 
     toolbox.register("attr_bool", random.uniform, sym.oprange[0], sym.oprange[1])
     toolbox.register("individual", tools.initRepeat, creator.OpIndividual, toolbox.attr_bool, n=np.sum(sym.effortMask))
@@ -31,16 +30,21 @@ def opOpt(sym: Type[EvPSCSym], pa: PaFenotype, rw: Type[RandomWorld]):
     toolbox.register("mutate", tools.mutPolynomialBounded, eta=10, low=-0.2, up=0.2, indpb=0.05)
     toolbox.register("select", tools.selTournament, tournsize=3)
 
-    toolbox.register("evaluate", opLoss, sym=sym, pa=pa, rw=rw)
+    # toolbox.register("evaluate", opLoss, sym=sym, pa=pa, rw=rw)
 
-    #pool = multiprocessing.Pool()
-    #toolbox.register("map", pool.map)
+# namespace
+def opOpt(sym: Type[EvPSCSym], pa: PaFenotype, rw: Type[RandomWorld]):
+
+    toolbox.register("evaluate", opLoss, sym=sym, pa=pa, rw=rw)
 
     pop = toolbox.population(n=300)
     hof = tools.HallOfFame(1, similar=np.array_equal)
 
-    algorithms.eaSimple(pop, toolbox, cxpb=0.5, mutpb=0.2, ngen=40,
-                        halloffame=hof, verbose=False)
+    POP = 400 if socket.gethostname() == 'soana' else 100
+
+    algorithms.eaSimple(pop, toolbox, cxpb=0.5, mutpb=0.2, ngen=POP,
+                         halloffame=hof, verbose=False)
+    # print("ok", toolbox.evaluate(hof[0]))
 
     return opGen2fen(hof[0], sym)
 

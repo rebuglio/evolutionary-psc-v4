@@ -1,16 +1,18 @@
 import random
+import socket
 import sys
 import time
+from multiprocessing import Pool
 from typing import Type
 
 import numpy as np
 from deap import base, creator, tools
 
-from deap_confidence import StochasticFitness, StochasticHallOfFame
-from deap_confidence.src.base import popReliability
+from deap_confidence import ConfidenceFitness, cmpQuality
+from deap_confidence.src.base import rmvDup
 from loss import socVal
 from problems.base import EvPSCSym
-from the_operator import opOpt
+from the_operator import opOpt, opPrecalc
 from the_randomworld import makeWorlds
 from utilities import paGenSlice
 from utils.deaputils import cxTwoPointCopy4ndArray
@@ -18,17 +20,22 @@ from deap import algorithms
 from datatype import PaFenotype
 
 
-# def buildPaGenotype(sym: Type[EvPSCSym]):
-#     # fee, pnlt, th, Rpc
-#     gens = [1, sum(sym.effortMask), sum(sym.effortMask), sym.K]
-#     return [ for g in ]
+def paSamples(gen: np.ndarray, sym: Type[EvPSCSym], n):
+    rws = makeWorlds(sym, n)
+    socVals = []
+    for rw in rws:
+        paFen = PaFenotype(sym, gen)
+        E = opOpt(sym, paFen, rw)
+        socVals.append(socVal(paFen, sym, rw, E))
+    return socVals
 
-# namespace
-def paOpt(sym: Type[EvPSCSym]):
+toolbox = base.Toolbox()
+
+def paSetup(sym: Type[EvPSCSym]):
+
     # optimizer setup
 
-    toolbox = base.Toolbox()
-    creator.create("ConfidenceFitness", StochasticFitness)
+    creator.create("ConfidenceFitness", ConfidenceFitness)
     creator.create("Individual", np.ndarray, fitness=creator.ConfidenceFitness)
 
     sls = paGenSlice(sym)
@@ -50,108 +57,94 @@ def paOpt(sym: Type[EvPSCSym]):
     toolbox.register("mutate", tools.mutPolynomialBounded, eta=10, low=lower, up=upper, indpb=0.2)
     toolbox.register("evaluate", lambda: (_ for _ in ()).throw(("Cant use evaluate in this simulation")))
 
-    # def middleEval(ind, sym: Type[EvPSCSym]):
-    #     ind.fitness.getMiddle
-    #
-    # toolbox.register("middleEvaluate", sym=sym)
 
-    def paSamples(gen: np.ndarray, sym: Type[EvPSCSym]):
-        [rw] = makeWorlds(sym, 1)
-        paFen = PaFenotype(sym, gen)
-        E = opOpt(sym, paFen, rw)
-        return socVal(paFen, sym, rw, E)
 
-    def _paOpt(sym):
+def paOpt(sym):
 
-        toolbox.register("sample", paSamples, sym=sym)
-        toolbox.register("select", tools.selTournament, tournsize=3)
-        # hof = StochasticHallOfFame(2, similar=np.array_equal)
-        hof = []
 
-        POP = 100
+    toolbox.register("select", tools.selTournament, tournsize=3)
+    # hof = tools.HallOfFame(2, similar=np.array_equal)
+    hof = []
+
+    if socket.gethostname() == 'soana':
+        POP = 4
         NGEN = 10000
-        CXPB = 0.05
-        MUTPB = 0.1
-        GROWPB = 0.1
-        MAXITER = 100
+        CXPB, MUTPB = 0.0, 0.4
+        MINSMPL = 10
+        MAXITER = 30
+    else:
+        POP = 3
+        NGEN = 10000
+        CXPB, MUTPB = 0.05, 0.5
+        MINSMPL = 2
+        MAXITER = 10
 
-        pop = toolbox.population(n=POP)
-        for ind in pop:
-            ind.fitness.addSamples([toolbox.sample(ind)])
+    # toolbox.register("bigsample", paSamples, sym=sym, n=MINSMPL)
+    toolbox.register("sample", paSamples, sym=sym, n=1)
 
-        for gen in range(NGEN):
-            offspring = algorithms.varAnd(pop, toolbox, CXPB, MUTPB)
+    pop = toolbox.population(n=POP)
 
-            # Evaluate the individuals with an invalid fitness
-            invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
-            print("Need total resample:", len(invalid_ind))
-            for ind in invalid_ind:
-                ind.fitness.addSamples([toolbox.sample(ind)])
+    print("sample")
+    pool = Pool()
+    toolbox.register("map", pool.map)
 
-            # SELECTION
+    def addSamples(targetpop, N):
+        samples = toolbox.map(toolbox.sample, targetpop * N)
+        print(len(samples))
+        print(len(targetpop*N))
+        for ind, ind_samples in zip(targetpop * N, samples):
+            ind.fitness.addSamples(ind_samples)
 
-            i = 0
-            while True:
+    addSamples(pop, MINSMPL)
 
-                # Try select (each comparison alter reliability)
-                trypop = toolbox.select(pop + offspring, POP)
+    for gen in range(NGEN):
+        print("gen:", gen)
 
-                # Check reliability
-                reliability = popReliability(trypop)
-                if np.mean(reliability) > 0.80 or i > MAXITER:
-                    # if reliability's good or max-iter reached, stop
-                    break
+        offspring = algorithms.varAnd(pop, toolbox, CXPB, MUTPB)
 
-                print("rel:", reliability)
+        # Evaluate the individuals with an invalid fitness
+        invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
+        print("Need total resample:", len(invalid_ind))
+        addSamples(invalid_ind, MINSMPL)
 
-                # Grow samples for PGROW % of solutions with worst reliability
-                ngrow = int(np.ceil(len(pop + offspring) * GROWPB))
-                for ind in sorted(pop + offspring, key=lambda ind: ind.fitness.reliability)[:ngrow]:
-                    ind.fitness.addSamples([toolbox.sample(ind)])
+        # Check % of incomparable
+        tocheck = rmvDup(pop + hof)
+        i = 0
+        cmpqlty = cmpQuality(tocheck)
+        print("cmpqlty", cmpqlty, "%")
+        while cmpqlty < 0.25 and i < MAXITER and len(tocheck) > 1:
+            cmpqlty = cmpQuality(tocheck)
+            print("cmpqlty", cmpqlty, "%")
+            for ind in tocheck:
+                print("ind", ind.fitness._interval[0], ind.fitness._interval[1])
 
-                i += 1
+            addSamples(tocheck, 5)
 
-            pop = trypop
+            print("grow n", len(tocheck))
+            i += 1
 
-            # HOF
 
-            i = 0
-            while True:
-                tryhof = tools.selBest(hof + pop, k=10)
+        # Pop is replaced
+        pop[:] = tools.selTournament(rmvDup(pop + offspring), k=POP, tournsize=3)
 
-                # Check reliability
-                reliability = popReliability(tryhof)
-                if np.mean(reliability) > 0.90 or i > MAXITER:
-                    # if reliability's good or max-iter reached, stop
-                    break
+        # Hof
+        hof[:] = tools.selBest(rmvDup(pop + hof), k=3)
 
-                # Grow samples for PGROW % of solutions with worst reliability
-                ngrow = int(np.ceil(len(tryhof) * GROWPB))
-                for ind in sorted(hof + pop, key=lambda ind: ind.fitness.reliability)[:ngrow]:
-                    ind.fitness.addSamples([toolbox.sample(ind)])
-
-                i += 1
-
-            print("tryhof:", tryhof)
-            hof = sorted(tryhof, key=lambda ind: np.mean(ind.fitness._utils), reverse=True)
-            print("hof:", [np.mean(ind.fitness._utils) for ind in hof])
-            print("hof0:", np.mean(hof[0].fitness._utils))
-
-            # STUFF
-
-            print("besthof:", np.mean(hof[0].fitness._samples))
-
-            with open('checkpoint.txt', 'a') as f:
-                printpa(hof[0], sym, file=f)
+        # Stuff
+        print('utils:', [np.mean(h.fitness._utils) for h in hof])
+        print("besthof sample, utils:", np.mean(hof[0].fitness._samples), np.mean(hof[0].fitness._utils))
+        for i in range(min(3, len(hof))):
+            with open(f'checkpoints/hof_{i}.txt', 'a') as f:
+                printpa(i, hof[i], sym, file=f)
                 f.flush()
 
-        return hof[0]
-
-    return _paOpt(sym)
+    return hof[0]
 
 
-def printpa(best, sym, file=sys.stdout):
+
+def printpa(index, best, sym, file=sys.stdout):
     fen = PaFenotype(sym, best)
+    print("index", index, file=file)
     print("fee", fen.fee, file=file)
     print("th", fen.th, file=file)
     print("pnlt", np.int64(fen.pnlt / 1000), file=file)
@@ -162,15 +155,18 @@ def printpa(best, sym, file=sys.stdout):
     # print("socval int", best.fitness._interval, file=file)
 
 
-# example
+
+from problems.a99 import a99 as sym
+
+random.seed(54)
+np.random.seed(55)
+
+sym.doPrecalcs(sym)
+opPrecalc(sym)
+paSetup(sym)
+
 if __name__ == '__main__':
-    # only 4 test
-    from problems.a99 import a99 as sym
 
-    random.seed(54)
-    np.random.seed(55)
-
-    sym.doPrecalcs(sym)
 
     s = time.time()
     best = paOpt(sym)
