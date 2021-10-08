@@ -54,26 +54,30 @@ def paSetup(sym: Type[EvPSCSym]):
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
 
     toolbox.register("mate", cxTwoPointCopy4ndArray)
-    toolbox.register("mutate", tools.mutPolynomialBounded, eta=10, low=lower, up=upper, indpb=0.2)
     toolbox.register("evaluate", lambda: (_ for _ in ()).throw(("Cant use evaluate in this simulation")))
 
+    def mutate(ind, low, up, indpb):
+        eta = random.randint(2,12)
+        # print("eta", eta)
+        return tools.mutPolynomialBounded(ind, eta, low, up, indpb)
+
+    toolbox.register("mutate", mutate, low=lower, up=upper, indpb=0.2)
 
 
 def paOpt(sym):
-
 
     toolbox.register("select", tools.selTournament, tournsize=3)
     # hof = tools.HallOfFame(2, similar=np.array_equal)
     hof = []
 
     if socket.gethostname() == 'soana':
-        POP = 4
+        POP = 15
         NGEN = 10000
-        CXPB, MUTPB = 0.0, 0.4
-        MINSMPL = 10
-        MAXITER = 30
+        CXPB, MUTPB = 0.1, 0.3
+        MINSMPL = 30
+        MAXITER = 80
     else:
-        POP = 3
+        POP = 2
         NGEN = 10000
         CXPB, MUTPB = 0.05, 0.5
         MINSMPL = 2
@@ -150,6 +154,7 @@ def printpa(index, best, sym, file=sys.stdout):
     print("pnlt", np.int64(fen.pnlt / 1000), file=file)
     print("Rpc", np.int64(fen.Rpc * 100), file=file)
     print("samples mean", np.mean(best.fitness._samples), file=file)
+    print("samples mean", best.fitness._samples, file=file)
     print("samples std", np.std(best.fitness._samples), file=file)
     print("samples n", len(best.fitness._samples), file=file)
     # print("socval int", best.fitness._interval, file=file)

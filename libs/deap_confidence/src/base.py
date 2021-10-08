@@ -6,15 +6,13 @@ from collections import deque
 from functools import partial
 
 
-def expUtility(a, c, unity):
+def expUtility(c):
     """
         Returns an exponential utility function, since
         https://en.wikipedia.org/wiki/Exponential_utility
     """
-    c = c / unity
-    if a == 0:
-        return c
-    return (1 - np.exp(-a * c)) / a
+    a = 0.015
+    return -np.exp(-a * c / 1000000)
 
 
 class ConfidenceFitness():
@@ -30,7 +28,7 @@ class ConfidenceFitness():
             self,
             confidence=0.90,
             history=10,
-            utilityfn=partial(expUtility, c=0.05, unity=100000)
+            utilityfn=expUtility
     ):
         self._utilityfn = utilityfn
         self._confidence = confidence
@@ -47,6 +45,7 @@ class ConfidenceFitness():
     def addSamples(self, samples: []):
         self._samples += samples
         self._utils += [self._utilityfn(s) for s in samples]
+        # self._utils += [s for s in samples]
 
         self._sizehistory.append(self._intsize)
         self._interval = stats.t.interval(
@@ -119,7 +118,8 @@ def cmpQuality(tocheck):
             if tocheck[i].fitness != tocheck[j].fitness:
                 cmp += 1
             tot += 1
-
+    if tot == 0:
+        return 1
     return cmp / tot
 
 
