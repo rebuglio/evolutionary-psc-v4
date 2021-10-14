@@ -10,7 +10,7 @@ ungroup = lambda V, L: np.array(sum([[x]*l for x, l in zip(V, L)], [])) # sum = 
 saturate = lambda v,l,h: h if v>h else l if v<l else v
 
 def paGenSlice(sym: Type[EvPSCSym]):
-    gelens = sum(sum(sym.effortMask))
+    gelens = sym.K
     return np.cumsum([1, gelens, gelens, sym.R])
 
 def opGen2fen(gen, sym: Type[EvPSCSym]):

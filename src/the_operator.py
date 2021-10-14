@@ -40,7 +40,7 @@ def opOpt(sym: Type[EvPSCSym], pa: PaFenotype, rw: Type[RandomWorld]):
     pop = toolbox.population(n=300)
     hof = tools.HallOfFame(1, similar=np.array_equal)
 
-    POP = 400 if socket.gethostname() == 'soana' else 100
+    POP = 400 if socket.gethostname() == 'soana' else 500
 
     algorithms.eaSimple(pop, toolbox, cxpb=0.5, mutpb=0.2, ngen=POP,
                          halloffame=hof, verbose=False)

@@ -2,14 +2,15 @@ import random
 import socket
 import sys
 import time
+from copy import deepcopy
 from multiprocessing import Pool
 from typing import Type
 
 import numpy as np
 from deap import base, creator, tools
 
-from deap_confidence import ConfidenceFitness, cmpQuality
-from deap_confidence.src.base import rmvDup
+from deap_confidence import ConfidenceFitness, rmvDup, UntilEnough, addSamples
+from deap_confidence.src.utils import cmpQuality
 from loss import socVal
 from problems.base import EvPSCSym
 from the_operator import opOpt, opPrecalc
@@ -31,7 +32,8 @@ def paSamples(gen: np.ndarray, sym: Type[EvPSCSym], n):
 
 toolbox = base.Toolbox()
 
-def paSetup(sym: Type[EvPSCSym]):
+def paSetup2(sym: Type[EvPSCSym]):
+    print("setup")
 
     # optimizer setup
 
@@ -41,10 +43,13 @@ def paSetup(sym: Type[EvPSCSym]):
     sls = paGenSlice(sym)
     genbounds = np.ndarray((sls[-1], 2))
     genbounds[0] = sym.parange[0]
-    genbounds[sls[0]:sls[1]] = sym.parange[1][sym.effortMask]
-    genbounds[sls[1]:sls[2]] = sym.parange[2][sym.effortMask]
+    genbounds[sls[0]:sls[1]] = sym.parange[1] # [np.full((2,6), True)] #[sym.effortMask] # pnlt
+    genbounds[sls[1]:sls[2]] = sym.parange[2] # [np.full((2,6), True)] #[sym.effortMask] # th
     genbounds[sls[2]:sls[3]] = [[0, 1] for i in range(sym.R)]
     lower, upper = [l[0] for l in genbounds], [l[1] for l in genbounds]
+
+    print("x",lower)
+    print("k",upper)
 
     def uniform(low, up, size=None):
         return [random.uniform(a, b) for a, b in zip(low, up)]
@@ -58,100 +63,78 @@ def paSetup(sym: Type[EvPSCSym]):
 
     def mutate(ind, low, up, indpb):
         eta = random.randint(2,12)
-        # print("eta", eta)
         return tools.mutPolynomialBounded(ind, eta, low, up, indpb)
+
+
 
     toolbox.register("mutate", mutate, low=lower, up=upper, indpb=0.2)
 
 
 def paOpt(sym):
 
-    toolbox.register("select", tools.selTournament, tournsize=3)
-    # hof = tools.HallOfFame(2, similar=np.array_equal)
-    hof = []
-
     if socket.gethostname() == 'soana':
-        POP = 15
+        POP = 16
         NGEN = 10000
         CXPB, MUTPB = 0.1, 0.3
-        MINSMPL = 30
-        MAXITER = 80
+        MINSMPL = 10
+        MAXITER = 50
     else:
         POP = 2
         NGEN = 10000
-        CXPB, MUTPB = 0.05, 0.5
-        MINSMPL = 2
+        CXPB, MUTPB = 0, 0.5
+        MINSMPL = 1
         MAXITER = 10
 
-    # toolbox.register("bigsample", paSamples, sym=sym, n=MINSMPL)
-    toolbox.register("sample", paSamples, sym=sym, n=1)
-
-    pop = toolbox.population(n=POP)
-
-    print("sample")
     pool = Pool()
     toolbox.register("map", pool.map)
+    toolbox.register("select", tools.selTournament, tournsize=3)
+    toolbox.register("paSample", paSamples, sym=sym, n=1)
+    toolbox.register("addSamples", addSamples, mapper=toolbox.map, sampler=toolbox.paSample)
 
-    def addSamples(targetpop, N):
-        samples = toolbox.map(toolbox.sample, targetpop * N)
-        print(len(samples))
-        print(len(targetpop*N))
-        for ind, ind_samples in zip(targetpop * N, samples):
-            ind.fitness.addSamples(ind_samples)
-
-    addSamples(pop, MINSMPL)
+    # Initialize pop with MINSMPL samples
+    pop = toolbox.population(n=POP)
+    toolbox.addSamples(pop, MINSMPL)
+    hof = []
 
     for gen in range(NGEN):
-        print("gen:", gen)
 
         offspring = algorithms.varAnd(pop, toolbox, CXPB, MUTPB)
 
         # Evaluate the individuals with an invalid fitness
         invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
-        print("Need total resample:", len(invalid_ind))
-        addSamples(invalid_ind, MINSMPL)
+        toolbox.addSamples(invalid_ind, MINSMPL)
 
-        # Check % of incomparable
-        tocheck = rmvDup(pop + hof)
-        i = 0
-        cmpqlty = cmpQuality(tocheck)
-        print("cmpqlty", cmpqlty, "%")
-        while cmpqlty < 0.25 and i < MAXITER and len(tocheck) > 1:
-            cmpqlty = cmpQuality(tocheck)
-            print("cmpqlty", cmpqlty, "%")
-            for ind in tocheck:
-                print("ind", ind.fitness._interval[0], ind.fitness._interval[1])
+        # Check % of comparable
+        for target in UntilEnough(pop + hof + offspring, 0.25, MAXITER):
+            print("lvl:", cmpQuality(pop + hof + offspring))
+            toolbox.addSamples(target, 5)
 
-            addSamples(tocheck, 5)
-
-            print("grow n", len(tocheck))
-            i += 1
-
-
-        # Pop is replaced
+        # Replace pop
         pop[:] = tools.selTournament(rmvDup(pop + offspring), k=POP, tournsize=3)
 
-        # Hof
-        hof[:] = tools.selBest(rmvDup(pop + hof), k=3)
+        # Update hof
+        hof[:] = [deepcopy(ind) for ind in tools.selBest(rmvDup(pop + hof), k=3)]
 
         # Stuff
-        print('utils:', [np.mean(h.fitness._utils) for h in hof])
-        print("besthof sample, utils:", np.mean(hof[0].fitness._samples), np.mean(hof[0].fitness._utils))
-        for i in range(min(3, len(hof))):
-            with open(f'checkpoints/hof_{i}.txt', 'a') as f:
-                printpa(i, hof[i], sym, file=f)
-                f.flush()
-
-    return hof[0]
+        debugPrint(hof)
 
 
+
+def debugPrint(hof):
+    # print('utils:', [np.mean(h.fitness._utils) for h in hof])
+    tp=hof[0]
+    print(f"# besthof sample, utils:", np.mean(tp.fitness._samples), np.mean(tp.fitness._utils))
+    for i in range(min(3, len(hof))):
+        with open(f'checkpoints/hof_{i}.txt', 'a') as f:
+            printpa(i, hof[i], sym, file=f)
+            f.flush()
 
 def printpa(index, best, sym, file=sys.stdout):
     fen = PaFenotype(sym, best)
     print("index", index, file=file)
     print("fee", fen.fee, file=file)
     print("th", fen.th, file=file)
-    print("pnlt", np.int64(fen.pnlt / 1000), file=file)
+    print("pnlt", np.int64(fen.pnlt / 1), file=file)
     print("Rpc", np.int64(fen.Rpc * 100), file=file)
     print("samples mean", np.mean(best.fitness._samples), file=file)
     print("samples mean", best.fitness._samples, file=file)
@@ -161,20 +144,19 @@ def printpa(index, best, sym, file=sys.stdout):
 
 
 
-from problems.a99 import a99 as sym
+from problems.es1 import es1 as sym
 
-random.seed(54)
-np.random.seed(55)
+# 54, 55
+random.seed(70)
+np.random.seed(70)
 
 sym.doPrecalcs(sym)
 opPrecalc(sym)
-paSetup(sym)
+paSetup2(sym)
 
 if __name__ == '__main__':
 
-
     s = time.time()
-    best = paOpt(sym)
-    printpa(best, sym)
+    paOpt(sym)
     t = time.time() - s
     print("Time:", t)

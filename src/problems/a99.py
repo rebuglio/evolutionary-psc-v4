@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import numpy as np
 
-from .base import EvPSCSym
+from problems.base import EvPSCSym
 from utilities import ungroup, group, lslice
 
 rng = np.random.default_rng(43)
@@ -56,13 +56,6 @@ def fx(E):
 # kpis
 # k, j
 # contribution of job j to kpis k
-# fkmat = np.identity(K)
-# fkmat =  [
-#     [1,0,0,0,0,0,0,0,0,0,0,0,0],
-#     [0,1,0,0,0,0,0,0,0,0,0,0,0],
-#     [0,0,0,0,0,0,0,0,1,0,0,0,0],
-#     [0,0,0,0,0,0,0,0,0,1,0,0,0]
-# ]
 fkmat = np.identity(K)
 
 def fk(E):
@@ -78,7 +71,7 @@ att = np.array(group(FA_sn, L, np.sum))
 F = F_raw * group(FA_i, L, np.sum)  # flusso raggruppato per periodi
 
 # risk precalc
-RPN = 500 # samples number
+RPN = 5000 # samples number
 Rv = np.full((R, T), None).tolist()
 for r in range(R):
     for t in range(T):
@@ -125,7 +118,8 @@ class a99(EvPSCSym):
 
 
 if __name__ == '__main__':
-    print(a99.parange)
+    for x in Rv[6][5]:
+        print(x)
 
 
 

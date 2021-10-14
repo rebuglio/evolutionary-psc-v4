@@ -11,6 +11,7 @@ def expUtility(c):
         Returns an exponential utility function, since
         https://en.wikipedia.org/wiki/Exponential_utility
     """
+    return c
     a = 0.015
     return -np.exp(-a * c / 1000000)
 
@@ -26,13 +27,13 @@ class ConfidenceFitness():
 
     def __init__(
             self,
-            confidence=0.90,
-            history=10,
-            utilityfn=expUtility
+            confidence = 0.90,
+            history = 10,
+            utilityfn = expUtility,
     ):
-        self._utilityfn = utilityfn
+        self._utilityFn = utilityfn
         self._confidence = confidence
-        self._sizehistory = deque(maxlen=history)
+        self._sizeHistory = deque(maxlen=history)
 
         self._samples = []
         self._utils = []
@@ -44,22 +45,15 @@ class ConfidenceFitness():
 
     def addSamples(self, samples: []):
         self._samples += samples
-        self._utils += [self._utilityfn(s) for s in samples]
-        # self._utils += [s for s in samples]
+        self._utils += samples
+        # self._utils += [self._utilityFn(s) for s in samples]
+        # print("check", self._samples, self._utils)
 
-        self._sizehistory.append(self._intsize)
+        self._sizeHistory.append(self._intsize)
         self._interval = stats.t.interval(
             self._confidence, len(self._utils) - 1,
             loc=np.mean(self._utils), scale=stats.sem(self._utils))
         self._intsize = self._interval[1] - self._interval[0]
-
-    @property
-    def potentialy(self):
-        """
-            Relative indicator showing "how much the interval can be reduced"
-            adding new samples
-        """
-        return np.mean(self._intvars)
 
     @property
     def valid(self):
@@ -70,6 +64,7 @@ class ConfidenceFitness():
 
     def _delValues(self):
         self._samples = []
+        self._utils = []
 
     def _getValues(self):
         raise Exception("Cant read value, use comparison operators")
@@ -81,12 +76,16 @@ class ConfidenceFitness():
                       ("Fitness values"))
 
     def __gt__(self, other):
-        if len(self._samples)<30 and len(self._samples) < len(other._samples):
+        if len(self._samples) < 10 or len(other._samples) < 10:
+            return False
+        if len(self._samples) * 3 < len(other._samples) * 2:
             return False
         return self._interval[0] > other._interval[1]
 
     def __le__(self, other):
-        if len(other._samples)<30 and len(other._samples) < len(self._samples):
+        if len(self._samples) < 10 or len(other._samples) < 10:
+            return False
+        if len(other._samples) * 3 < len(self._samples) * 2:
             return False
         return self._interval[1] < other._interval[0]
 
@@ -97,53 +96,3 @@ class ConfidenceFitness():
         return not self != other
 
 
-def rmvDup(tocheck):
-    random.shuffle(tocheck)
-    ok = []
-    for x1 in tocheck:
-        find = False
-        for x2 in ok:
-            diff = np.linalg.norm(x1 - x2)
-            if diff == 0: # x1.fitness._utils[-1] == x2.fitness._utils[-1]
-                find = True
-        if find == False:
-            ok.append(x1)
-    return ok
-
-
-def cmpQuality(tocheck):
-    cmp, tot = 0, 0
-    for i in range(1, len(tocheck)):
-        for j in range(i):
-            if tocheck[i].fitness != tocheck[j].fitness:
-                cmp += 1
-            tot += 1
-    if tot == 0:
-        return 1
-    return cmp / tot
-
-
-def removeBounded(individuals, atleast, atmost):
-    """
-        Remove confidence interval which maximum
-        is lower than other minimum.
-    """
-    if len(individuals) < atleast:
-        raise Exception(f"Can't select {atleast} element from {len(individuals)} individuals.")
-    if atleast > atmost:
-        raise Exception(f"Invalid atleast, atmost couple ({atleast}, {atmost})")
-
-    lbound = max([i.fitness.min for i in individuals if i.fitness.min is not None], default=None)
-    if lbound is None:
-        return individuals[:min(atmost, len(individuals))]
-    domDistances = [i.fitness.max - lbound for i in individuals]
-    domDistances, individuals = zip(*sorted(zip(domDistances, individuals), reverse=True))
-    individuals = list(individuals)
-    domCount = sum([1 for d in domDistances if d <= 0])
-
-    totake = len(individuals) - domCount
-    if totake < atleast:
-        totake = atleast
-    elif totake > atmost:
-        totake = atmost
-    return individuals[:totake]

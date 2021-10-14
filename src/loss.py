@@ -34,9 +34,10 @@ def socVal(
             - np.sum(pa.fee)
         ) * sym.att
     )
-
+    #print("opg, sv", OPG, SV)
     if OPG < 0:
-        SV = SV + 2 * OPG
+        SV = SV + OPG*2
+    #print("_pg, sv", OPG, SV)
 
     return SV
 
@@ -53,10 +54,10 @@ def opLoss(
     r = np.where(e_star > 0, e_star * (1 - pa.Rpc), e_star)
     return np.sum(  # over time
         (
-                - np.sum(sym.F * (1 + E), axis=0)
-                - np.sum(r, axis=0)
-                - np.sum(p, axis=0)
-                + np.sum(pa.fee)
+            - np.sum(sym.F * (1 + E), axis=0)
+            - np.sum(r, axis=0)
+            - np.sum(p, axis=0)
+            + np.sum(pa.fee)
         ) * sym.att
     ),  # dont remove this comma
 

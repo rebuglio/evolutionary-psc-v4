@@ -16,8 +16,11 @@ class PaFenotype():
         sls = paGenSlice(sym)
 
         self.fee = gen[0]
-        self.pnlt[sym.effortMask] = gen[sls[0]:sls[1]]
-        self.th[sym.effortMask] = gen[sls[1]:sls[2]]
+        #print("g:",gen[sls[0]:sls[1]])
+        for t in range(sym.T):
+            self.pnlt[:,t] = gen[sls[0]:sls[1]]
+            self.th[:,t] = gen[sls[1]:sls[2]]
+        #print("ch", self.pnlt)
         self.Rpc = np.reshape(gen[sls[2]:sls[3]], (sym.R, 1))
 
 

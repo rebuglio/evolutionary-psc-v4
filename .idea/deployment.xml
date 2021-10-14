@@ -12,7 +12,7 @@
       <paths name="massimo_r@soana.polito.it:22 key">
         <serverdata>
           <mappings>
-            <mapping deploy="/home/massimo_r/tesi/v4" local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="/home/massimo_r/tesi/v4_nor" local="$PROJECT_DIR$" web="/" />
           </mappings>
           <excludedPaths>
             <excludedPath local="true" path="$PROJECT_DIR$/src/checkpoints" />
