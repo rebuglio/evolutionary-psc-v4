@@ -32,13 +32,19 @@ Apc = np.transpose([
     # [1,1,1,1,1,1,1,1]
 ])
 
+# k, t
+kpimask = np.array([
+    [True, True,  True, True, True, True],
+    [True, True,  True, True, True, True]
+])
+
 # externalities
-# r, j
+# j, t
 # contribution of job j effort to increase/reduce risk r
 def fx(E):
-    fx = np.zeros((R, T))
+    fx = np.zeros((J, T))
 
-    j = 2
+    j = 1
     for t in range(1,2): # 2,3
         fx[j,t] = 1000/3*E[0,0]
     return fx
@@ -64,12 +70,12 @@ att = np.array(group(FA_sn, L, np.sum))
 F = F_raw * group(FA_i, L, np.sum)  # flusso raggruppato per periodi
 
 # risk precalc
-RPN = 5000 # samples number
+RPN = 50000 # samples number
 
 Rv = np.full((R, T), None).tolist()
 for r in range(R):
     for t in range(T):
-        Rv[r][t] = [0]
+        Rv[r][t] = [-200,200]
 Rp = np.full((R, T), None).tolist()
 
 @dataclass
@@ -80,6 +86,8 @@ class es1(EvPSCSym):
     Apc = Apc
 
     oprange = (-0.2, 0.2) # np.array([(-0.2, 0.2) for x, y in np.ndindex(F.shape) if F[x, y] != 0])
+
+    kpimask=kpimask
 
     parange = [
         np.array([100, 2000]),         # fee

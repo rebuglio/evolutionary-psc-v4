@@ -13,7 +13,7 @@ def socVal(
     rw: Type[RandomWorld],
     E: np.ndarray
 ):
-    p = pa.pnlt * (sym.fk(E) < pa.th)    # faster then np.where
+    p = pa.pnlt * (sym.fk(E) < pa.th) * sym.kpimask    # faster then np.where
     e_star = rw.eps + sym.fx(E) * sym.Apc  # rischio spacciato alla pa
     r = np.where(e_star > 0, e_star * (1 - pa.Rpc), e_star)
     rpa = np.where(e_star > 0, e_star * pa.Rpc, 0)
@@ -49,7 +49,7 @@ def opLoss(
         rw: Type[RandomWorld]
 ):
     E = opGen2fen(gen, sym)
-    p = pa.pnlt * (sym.fk(E) < pa.th)  # faster then np.where
+    p = pa.pnlt * (sym.fk(E) < pa.th) * sym.kpimask # faster then np.where
     e_star = rw.eps + sym.fx(E) * sym.Apc  # rischio spacciato alla pa
     r = np.where(e_star > 0, e_star * (1 - pa.Rpc), e_star)
     return np.sum(  # over time

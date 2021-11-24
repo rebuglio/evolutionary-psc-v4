@@ -66,7 +66,6 @@ def paSetup2(sym: Type[EvPSCSym]):
         return tools.mutPolynomialBounded(ind, eta, low, up, indpb)
 
 
-
     toolbox.register("mutate", mutate, low=lower, up=upper, indpb=0.2)
 
 
@@ -105,7 +104,7 @@ def paOpt(sym):
         toolbox.addSamples(invalid_ind, MINSMPL)
 
         # Check % of comparable
-        for target in UntilEnough(pop + hof + offspring, 0.25, MAXITER):
+        for target in UntilEnough(pop + hof + offspring, 0.75, MAXITER):
             print("lvl:", cmpQuality(pop + hof + offspring))
             toolbox.addSamples(target, 5)
 

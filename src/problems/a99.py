@@ -11,7 +11,7 @@ Tv = sum(L)
 T = 6
 J = 13  # jobs
 R = 8  # risks = n. exo = n. ext
-K = 13
+K = 7
 
 # [j][t]
 F_raw = np.transpose([
@@ -35,14 +35,14 @@ R_raw = [
     ungroup([{'v': [0, 0, 8, 4, 12], 'p': [0.00, 0.30, 0.35, 0.25, 0.10], 'i': 6}], [Tv]),  # j6
     ungroup([
         {'v': [0, 0, 10, 20, 30], 'p': [0.00, 0.35, 0.30, 0.25, 0.10], 'i': 7},  # j7.1
-        {'v': [0, 0, 10, 20, 30], 'p': [0.00, 0.35, 0.26, 0.27, 0.12], 'i': 8}  # j7.2
+        {'v': [0, 0, 10, 20, 30], 'p': [0.00, 0.35, 0.26, 0.27, 0.12], 'i': 7}  # j7.2
     ], [11, Tv - 11])
 ]
 
 # [r] (column vector)
 Apc = np.transpose([
-    [0, 0, 0, 0, 0, 0, 0, 0]
-    # [1,1,1,1,1,1,1,1]
+    # [0.2, 0.3, 0.1, 0.4, 0.5, 0.1, 0.2, 0.3]
+    [0,0,0,0,0,0,0,0]
 ])
 
 # externalities
@@ -50,13 +50,38 @@ Apc = np.transpose([
 # contribution of job j effort to increase/reduce risk r
 def fx(E):
     fx = np.zeros((R, T))
-    # fx[6, 5] = -E[3, 0]
+    for t in range(0,3):
+        fx[3, t] = -E[0, 0]*0.05    # proj 2 costr
+        fx[4, t] = -E[0, 0] * 0.05  # proj 2 costr
+    fx[6, 5] = -E[3, 0]*0.1     # costr 2 man ord
+    fx[7, 5] = -E[3, 0]*0.05    # costr 2 man straord
     return fx
 
 # kpis
 # k, j
 # contribution of job j to kpis k
-fkmat = np.identity(K)
+fkmat = np.array([
+    [0.1, 0.1, 0.1, 0.5, 0.1, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    [0.0, 0.0, 0.5, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    [0.3, 0.4, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    [0.2, 0.0, 0.0, 0.8, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+
+    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0],
+    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.7, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0],
+])
+
+# k, t
+kpimask = np.array([
+    [False, True,  False, False, False, False],
+    [False, True,  False, False, False, False],
+    [False, True,  True,  False, False, False],
+    [False, False, True,  False, False, False],
+
+    [False, False, False, False, True,  False],
+    [False, False, False, False, False, True ],
+    [False, False, False, False, False, True ],
+])
 
 def fk(E):
     return fkmat @ E
@@ -71,7 +96,7 @@ att = np.array(group(FA_sn, L, np.sum))
 F = F_raw * group(FA_i, L, np.sum)  # flusso raggruppato per periodi
 
 # risk precalc
-RPN = 5000 # samples number
+RPN = 50000 # pre-samples number
 Rv = np.full((R, T), None).tolist()
 for r in range(R):
     for t in range(T):
@@ -104,12 +129,14 @@ class a99(EvPSCSym):
     fk, fx = fk, fx
     Apc = Apc
 
+    kpimask=kpimask
+
     oprange = (-0.2, 0.2) # np.array([(-0.2, 0.2) for x, y in np.ndindex(F.shape) if F[x, y] != 0])
 
     parange = [
         np.array([400000, 800000]),         # fee
-        np.dstack((np.zeros(F.shape), F)),  # pnlt
-        np.full((*F.shape,2), [-0.2, 0.2]), # th
+        np.full((K,2), [0, 500000]),        # pnlt
+        np.full((K,2), [-0.2, 0.2]),        # th
         np.full((R,1,2), [0,1])             # Rpc
     ]
 
@@ -118,8 +145,10 @@ class a99(EvPSCSym):
 
 
 if __name__ == '__main__':
-    for x in Rv[6][5]:
-        print(x)
+     # print (Rv)
+    import pandas as pd
+
+    pd.DataFrame(Rv).to_csv("Rv1.csv")
 
 
 

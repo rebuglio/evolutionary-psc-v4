@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 @dataclass
 class EvPSCSym():
+    kpimask: np.ndarray
     R: int
     K: int
     J: int
